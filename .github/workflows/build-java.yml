@@ -51,28 +51,21 @@ jobs:
         sdkmanager "build-tools;33.0.0" "platforms;android-33" "platform-tools"
         sdkmanager --list_installed | head -5
 
+    - name: Download Gradle
+      run: |
+        mkdir -p $HOME/.gradle/wrapper/dists/gradle-8.2-bin
+        curl -sL --connect-timeout 30 --max-time 300 \
+          "https://services.gradle.org/distributions/gradle-8.2-bin.zip" \
+          -o /tmp/gradle-8.2-bin.zip
+        unzip -qo /tmp/gradle-8.2-bin.zip -d $HOME/.gradle/wrapper/dists/gradle-8.2-bin/
+        export PATH="$HOME/.gradle/wrapper/dists/gradle-8.2-bin/gradle-8.2/bin:$PATH"
+        gradle --version
+
     - name: Build APK with Gradle
       run: |
+        export PATH="$HOME/.gradle/wrapper/dists/gradle-8.2-bin/gradle-8.2/bin:$PATH"
         cd java_project
-        chmod +x gradlew.bat 2>/dev/null || true
-        
-        # Use gradle wrapper or download gradle
-        mkdir -p gradle/wrapper
-        cat > gradlew << 'EOFGRADLE'
-        #!/bin/bash
-        GRADLE_HOME="$HOME/.gradle/wrapper/dists/gradle-8.2-bin"
-        if [ ! -d "$GRADLE_HOME" ]; then
-          curl -sL "https://services.gradle.org/distributions/gradle-8.2-bin.zip" -o gradle.zip
-          unzip -qo gradle.zip -d "$HOME/.gradle/wrapper/dists/"
-        fi
-        "$HOME/.gradle/wrapper/dists/gradle-8.2-bin/gradle-8.2/bin/gradle" "$@"
-        EOFGRADLE
-        chmod +x gradlew
-        
-        ./gradlew assembleDebug --info 2>&1 | tee /tmp/gradle.log
-        
-        echo "=== Build output ==="
-        find . -name "*.apk" -type f
+        gradle assembleDebug 2>&1 | tee /tmp/gradle.log
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
