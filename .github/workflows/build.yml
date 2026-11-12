@@ -26,14 +26,15 @@ jobs:
 
     - name: Accept Android SDK licenses
       run: |
-        mkdir -p $HOME/android-sdk
-        cd $HOME/android-sdk
-        curl -sLO https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-        unzip -q cmdline.zip
-        mkdir -p cmdline-tools/latest
-        mv cmdline-tools/bin cmdline-tools/lib cmdline-tools/source.properties cmdline-tools/latest/ 2>/dev/null || true
-        export PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH
-        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+        export ANDROID_HOME=$HOME/android-sdk
+        mkdir -p $ANDROID_HOME/cmdline-tools/latest
+        cd $ANDROID_HOME/cmdline-tools
+        curl -sLO https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
+        ls -la
+        unzip -q commandlinetools-linux-10406996_latest.zip
+        mv cmdline-tools latest
+        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+        yes | sdkmanager --licenses
 
     - name: Install buildozer
       run: pip install buildozer cython
