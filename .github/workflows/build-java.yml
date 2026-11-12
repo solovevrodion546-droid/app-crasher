@@ -1,0 +1,74 @@
+name: Build AppCrasher APK (Pure Java)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  ANDROID_HOME: ${{ github.workspace }}/android-sdk
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Setup Android SDK (with ghfast.top proxy)
+      run: |
+        mkdir -p $ANDROID_HOME/cmdline-tools
+        cd $ANDROID_HOME/cmdline-tools
+        
+        # Try with ghfast.top proxy first, fallback to direct
+        curl -sL "https://ghfast.top/https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip" -o ct.zip 2>/dev/null
+        if [ ! -s ct.zip ]; then
+          echo "Proxy failed, trying direct..."
+          curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip" -o ct.zip
+        fi
+        
+        unzip -qo ct.zip
+        mv cmdline-tools latest
+        rm ct.zip
+        
+        export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+        yes | sdkmanager --licenses
+        sdkmanager "build-tools;33.0.0" "platforms;android-33" "platform-tools"
+
+    - name: Build APK with Gradle
+      run: |
+        cd java_project
+        chmod +x gradlew.bat 2>/dev/null || true
+        
+        # Use gradle wrapper or download gradle
+        mkdir -p gradle/wrapper
+        cat > gradlew << 'EOFGRADLE'
+        #!/bin/bash
+        GRADLE_HOME="$HOME/.gradle/wrapper/dists/gradle-8.2-bin"
+        if [ ! -d "$GRADLE_HOME" ]; then
+          curl -sL "https://services.gradle.org/distributions/gradle-8.2-bin.zip" -o gradle.zip
+          unzip -qo gradle.zip -d "$HOME/.gradle/wrapper/dists/"
+        fi
+        "$HOME/.gradle/wrapper/dists/gradle-8.2-bin/gradle-8.2/bin/gradle" "$@"
+        EOFGRADLE
+        chmod +x gradlew
+        
+        ./gradlew assembleDebug --info 2>&1 | tee /tmp/gradle.log
+        
+        echo "=== Build output ==="
+        find . -name "*.apk" -type f
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-crasher-apk
+        path: java_project/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 7
