@@ -19,12 +19,7 @@
         <service
             android:name=".CrashService"
             android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Crash monitor service" />
-        </service>
+            android:exported="false" />
 
         <activity
             android:name=".MainActivity"
