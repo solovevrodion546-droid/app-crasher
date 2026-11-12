@@ -1,8 +1,10 @@
 package org.appcrasher.crasher;
 
 import android.app.ListActivity;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.widget.Toast;
 import java.util.ArrayList;
@@ -17,11 +19,37 @@ public class MainActivity extends ListActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        
+        // Создаём Notification Channel (нужен для Foreground Service)
+        createNotificationChannel();
+        
+        // Запускаем сервис
+        startService(new Intent(this, CrashService.class));
+        
+        // Загружаем список приложений
+        populateAppList();
+    }
 
-        PackageManager pm = getPackageManager();
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                "crash_channel",
+                "AppCrasher",
+                NotificationManager.IMPORTANCE_LOW
+            );
+            channel.setDescription("Мониторинг выпоты приложений");
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) {
+                manager.createNotificationChannel(channel);
+            }
+        }
+    }
 
-        List<PackageInfo> packages = pm.getInstalledPackages(0);
-        for (PackageInfo pkg : packages) {
+    private void populateAppList() {
+        android.content.pm.PackageManager pm = getPackageManager();
+        List<android.content.pm.PackageInfo> packages = pm.getInstalledPackages(0);
+        
+        for (android.content.pm.PackageInfo pkg : packages) {
             if ((pkg.applicationInfo.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0) {
                 CharSequence name = pkg.applicationInfo.loadLabel(pm);
                 if (name != null && !name.toString().isEmpty()) {
@@ -30,25 +58,15 @@ public class MainActivity extends ListActivity {
                 }
             }
         }
-
+        
         Collections.sort(appList, (a, b) -> a.name.compareTo(b.name));
         setListAdapter(new AppAdapter(this, appList));
-
+        
         getListView().setOnItemClickListener((parent, view, position, id) -> {
             AppItem selected = appList.get(position);
-            crashApp(selected.packageName, selected.name);
+            Toast.makeText(this, "🎯 " + selected.name + " выплотит при запуске!", 
+                Toast.LENGTH_LONG).show();
         });
-    }
-
-    private void crashApp(String packageName, String appName) {
-        try {
-            Process process = Runtime.getRuntime().exec(
-                new String[]{"am", "force-stop", packageName});
-            process.waitFor();
-            Toast.makeText(this, "✅ " + appName + " выплотела!", Toast.LENGTH_LONG).show();
-        } catch (Exception e) {
-            Toast.makeText(this, "⚠️ Не удалось: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
     }
 
     static class AppItem {
