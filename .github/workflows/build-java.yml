@@ -63,7 +63,6 @@ jobs:
 
     - name: Build APK with Gradle
       run: |
-        export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
         export ANDROID_SDK_ROOT="$ANDROID_HOME"
         export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
         cd java_project
