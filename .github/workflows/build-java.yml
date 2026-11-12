@@ -63,7 +63,9 @@ jobs:
 
     - name: Build APK with Gradle
       run: |
-        export PATH="$HOME/.gradle/wrapper/dists/gradle-8.2-bin/gradle-8.2/bin:$PATH"
+        export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
+        export ANDROID_SDK_ROOT="$ANDROID_HOME"
+        export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
         cd java_project
         gradle assembleDebug 2>&1 | tee /tmp/gradle.log
 
