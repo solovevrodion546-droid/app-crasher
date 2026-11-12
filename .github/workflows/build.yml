@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  ANDROID_HOME: /home/runner/android-sdk
+  ANDROID_HOME: ${{ github.workspace }}/android-sdk
 
 jobs:
   build-apk:
@@ -27,29 +27,41 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Setup Android SDK (install to buildozer location)
+    - name: Setup Android SDK for buildozer
       run: |
-        # Create buildozer's expected Android SDK path
+        # Create buildozer's expected directory structure
         BUILD_DIR="$HOME/.buildozer/android/platform"
-        mkdir -p "$BUILD_DIR/android-sdk"
+        mkdir -p "$BUILD_DIR/android-sdk/tools/bin"
         mkdir -p "$BUILD_DIR/android-sdk/cmdline-tools"
         
         cd "$BUILD_DIR/android-sdk/cmdline-tools"
         curl -sLO https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
         unzip -q commandlinetools-linux-10406996_latest.zip
-        mv cmdline-tools latest
+        
+        # Copy sdkmanager to tools/bin (buildozer expects it here)
+        mkdir -p latest
+        mv cmdline-tools/bin cmdline-tools/lib cmdline-tools/source.properties latest/ 2>/dev/null || true
+        
+        # Also copy to tools/bin
+        cp -r latest/bin/* "$BUILD_DIR/android-sdk/tools/bin/" 2>/dev/null || true
+        
         rm commandlinetools-linux-10406996_latest.zip
         
-        # Accept licenses
-        export PATH="$BUILD_DIR/android-sdk/cmdline-tools/latest/bin:$PATH"
+        export PATH="$BUILD_DIR/android-sdk/tools/bin:$BUILD_DIR/android-sdk/cmdline-tools/latest/bin:$PATH"
+        
+        # Accept ALL licenses
         yes | sdkmanager --licenses
         
-        # Install required packages
-        sdkmanager "build-tools;33.0.0" "platforms;android-33" "platform-tools"
+        # Install critical packages  
+        sdkmanager "build-tools;33.0.0" "platforms;android-33" "platform-tools" "ndk;25b"
         
-        # Verify installation
-        ls -la "$BUILD_DIR/android-sdk/build-tools/"
-        ls -la "$BUILD_DIR/android-sdk/platforms/"
+        # Verify
+        echo "=== SDK tools ==="
+        ls "$BUILD_DIR/android-sdk/tools/bin/"
+        echo "=== build-tools ==="
+        ls "$BUILD_DIR/android-sdk/build-tools/" 2>/dev/null
+        echo "=== platforms ==="
+        ls "$BUILD_DIR/android-sdk/platforms/" 2>/dev/null
 
     - name: Install buildozer
       run: pip install buildozer cython
@@ -57,18 +69,17 @@ jobs:
     - name: Build APK
       run: |
         export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
-        export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-        buildozer android debug 2>&1 | tee /tmp/build.log
-        echo "---LAST 10 LINES---"
-        tail -10 /tmp/build.log
+        export PATH="$ANDROID_HOME/tools/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+        buildozer android debug
 
-    - name: Check APK
+    - name: Check for APK
       if: always()
       run: |
-        echo "=== Checking for APK ==="
-        find "$HOME" -name "*.apk" -type f 2>/dev/null
+        echo "=== Looking for APK ==="
+        find "$HOME/.buildozer" -name "*.apk" -type f 2>/dev/null
+        find "$HOME" -maxdepth 4 -name "app-crasher*.apk" -type f 2>/dev/null
         ls -la dist/*.apk 2>/dev/null || echo "No APK in dist/"
-        
+
     - name: Upload APK
       if: success()
       uses: actions/upload-artifact@v4
