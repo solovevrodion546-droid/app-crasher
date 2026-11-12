@@ -24,55 +24,71 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Setup Android SDK and accept licenses
+    - name: Download and setup Android SDK
       run: |
-        ANDROID_HOME="$HOME/android-sdk"
-        mkdir -p "$ANDROID_HOME/cmdline-tools"
+        # This is where buildozer will place its SDK
+        BUILD_DIR="$HOME/.buildozer/android/platform"
+        SDK_DIR="$BUILD_DIR/android-sdk"
         
-        # Download and extract
-        cd "$ANDROID_HOME/cmdline-tools"
+        mkdir -p "$SDK_DIR/cmdline-tools"
+        mkdir -p "$SDK_DIR/build-tools"
+        mkdir -p "$SDK_DIR/tools/bin"
+        mkdir -p "$SDK_DIR/tools"
+        
+        # Download SDK command line tools
+        cd "$SDK_DIR/cmdline-tools"
         wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O ct.zip
-        if [ ! -f ct.zip ] || [ ! -s ct.zip ]; then
-          echo "ERROR: Download failed"
-          exit 1
-        fi
         unzip -qo ct.zip
         mv cmdline-tools latest
         rm ct.zip
         
-        # Accept licenses using sdkmanager from cmdline-tools
-        export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-        sdkmanager --version || { echo "sdkmanager broken, trying alternatives..."; exit 1; }
+        # Create tools/bin/sdkmanager symlink (buildozer looks here)
+        ln -sf "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" "$SDK_DIR/tools/bin/sdkmanager"
+        ln -sf "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" "$SDK_DIR/tools/bin/sdkmanager.bat" 2>/dev/null || true
+        
+        # Accept licenses
+        export PATH="$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/tools/bin:$PATH"
         yes | sdkmanager --licenses
         
-        echo "SDK setup complete"
-        sdkmanager --list_installed
+        # Install build-tools and platform into buildozer's SDK
+        sdkmanager "build-tools;33.0.0" "platforms;android-33" "platform-tools"
+        
+        # Verify
+        echo "=== SDK tools/bin ==="
+        ls "$SDK_DIR/tools/bin/"
+        echo "=== build-tools ==="
+        ls "$SDK_DIR/build-tools/"
+        echo "=== platforms ==="
+        ls "$SDK_DIR/platforms/"
 
     - name: Install buildozer
       run: pip install buildozer cython
 
+    - name: Patch buildozer to use correct sdkmanager
+      run: |
+        # buildozer uses tools/bin/sdkmanager - verify the link works
+        echo "Testing sdkmanager link..."
+        "$HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager" --version
+        echo "sdkmanager works!"
+
     - name: Build APK
       run: |
-        ANDROID_HOME="$HOME/android-sdk"
-        export ANDROID_HOME
-        export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-        
-        # Verify tools exist
-        echo "=== Tools ==="
-        ls "$ANDROID_HOME/cmdline-tools/latest/bin/"
-        echo "=== Starting buildozer ==="
+        export PATH="$HOME/.buildozer/android/platform/android-sdk/tools/bin:$PATH"
+        export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
         
         buildozer android debug 2>&1 | tee /tmp/build.log
-        
-        echo "=== BUILD DONE ==="
-        tail -5 /tmp/build.log
+        EXIT_CODE=${PIPESTATUS[0]}
+        echo "=== EXIT CODE: $EXIT_CODE ==="
+        echo "=== Last 20 lines ==="
+        tail -20 /tmp/build.log
 
-    - name: Debug APK search
+    - name: Search for APK
       if: always()
       run: |
-        echo "=== Searching APK ==="
-        find "$HOME" -name "*.apk" 2>/dev/null | head -5
-        ls -la dist/ 2>/dev/null
+        echo "=== Searching for APK ==="
+        find "$HOME" -name "*.apk" -type f 2>/dev/null | head -5
+        ls -la dist/ 2>/dev/null || echo "No dist/"
+        cat /tmp/build.log 2>/dev/null | grep -i "apk\|error\|fail\|success" | tail -10
 
     - name: Upload APK
       if: success()
