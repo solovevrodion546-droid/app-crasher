@@ -24,38 +24,55 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Accept SDK licenses early
+    - name: Setup Android SDK and accept licenses
       run: |
-        mkdir -p /tmp/android-sdk/cmdline-tools
-        cd /tmp/android-sdk/cmdline-tools
-        curl -sLO https://dl.google.com/android/repository/commandlinetools-linux-11262923_latest.zip
-        unzip -qo commandlinetools-linux-11262923_latest.zip
+        ANDROID_HOME="$HOME/android-sdk"
+        mkdir -p "$ANDROID_HOME/cmdline-tools"
+        
+        # Download and extract
+        cd "$ANDROID_HOME/cmdline-tools"
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O ct.zip
+        if [ ! -f ct.zip ] || [ ! -s ct.zip ]; then
+          echo "ERROR: Download failed"
+          exit 1
+        fi
+        unzip -qo ct.zip
         mv cmdline-tools latest
-        rm commandlinetools-linux-11262923_latest.zip
-        export PATH="/tmp/android-sdk/cmdline-tools/latest/bin:$PATH"
+        rm ct.zip
+        
+        # Accept licenses using sdkmanager from cmdline-tools
+        export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+        sdkmanager --version || { echo "sdkmanager broken, trying alternatives..."; exit 1; }
         yes | sdkmanager --licenses
-        echo "Licenses accepted."
+        
+        echo "SDK setup complete"
+        sdkmanager --list_installed
 
     - name: Install buildozer
       run: pip install buildozer cython
 
-    - name: Build APK (let buildozer handle SDK/NDK)
+    - name: Build APK
       run: |
-        export PATH="/tmp/android-sdk/cmdline-tools/latest/bin:$PATH"
-        export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
+        ANDROID_HOME="$HOME/android-sdk"
+        export ANDROID_HOME
+        export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+        
+        # Verify tools exist
+        echo "=== Tools ==="
+        ls "$ANDROID_HOME/cmdline-tools/latest/bin/"
+        echo "=== Starting buildozer ==="
+        
         buildozer android debug 2>&1 | tee /tmp/build.log
-        echo "=== BUILD EXIT CODE: $? ==="
-        echo "=== Last 30 lines ==="
-        tail -30 /tmp/build.log
+        
+        echo "=== BUILD DONE ==="
+        tail -5 /tmp/build.log
 
     - name: Debug APK search
       if: always()
       run: |
-        echo "=== Searching for APK ==="
+        echo "=== Searching APK ==="
         find "$HOME" -name "*.apk" 2>/dev/null | head -5
-        ls -laR dist/ 2>/dev/null || echo "No dist/"
-        echo "=== buildozer.spec ==="
-        cat buildozer.spec
+        ls -la dist/ 2>/dev/null
 
     - name: Upload APK
       if: success()
