@@ -3,6 +3,9 @@
 # Название приложения
 title = AppCrasher
 
+# Версия
+version = 1.0.0
+
 # Имя пакета
 package.name = appcrasher
 
@@ -10,7 +13,7 @@ package.name = appcrasher
 package.domain = org.appcrasher
 
 # Исходный код
-source.src = .
+source.dir = .
 
 # Включаемые расширения
 source.include_exts = py
