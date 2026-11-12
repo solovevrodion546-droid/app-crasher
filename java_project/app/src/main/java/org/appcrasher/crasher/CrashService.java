@@ -2,14 +2,12 @@ package org.appcrasher.crasher;
 
 import android.app.Service;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.widget.Toast;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -20,7 +18,7 @@ public class CrashService extends Service {
     private Handler handler;
     private Set<String> targetPackages = new HashSet<>();
     private PackageManager pm;
-    private static final long CHECK_INTERVAL = 2000; // 2 секунды
+    private static final long CHECK_INTERVAL = 3000; // 3 секунды
 
     @Override
     public void onCreate() {
@@ -28,10 +26,10 @@ public class CrashService extends Service {
         pm = getPackageManager();
         handler = new Handler(Looper.getMainLooper());
         
-        // Создаём уведомление для foreground service (чтобы Huawei не убивал)
+        // Foreground service — Huawei не убьёт с уведомлением
         android.app.Notification notification = new android.app.Notification.Builder(this, "crash_channel")
-            .setContentTitle("AppCrasher")
-            .setContentText("Мониторинг запущен...")
+            .setContentTitle("AppCrasher v2")
+            .setContentText("Мониторинг запущен! Нажми на приложение чтобы выплотить.")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .build();
         
@@ -46,55 +44,29 @@ public class CrashService extends Service {
         monitorTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                checkAndCrash();
+                for (String pkg : targetPackages) {
+                    try {
+                        // Пытаемся получить название приложения
+                        CharSequence name = "Приложение";
+                        try {
+                            name = pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0));
+                        } catch (Exception ignored) {}
+                        
+                        // force-stop — работает на Huawei
+                        Runtime.getRuntime().exec(new String[]{"am", "force-stop", pkg});
+                        
+                        // Показываем результат
+                        final CharSequence finalName = name;
+                        handler.post(() -> {
+                            Toast.makeText(CrashService.this, "✅ " + finalName + " выплотела!", 
+                                Toast.LENGTH_LONG).show();
+                        });
+                    } catch (Exception e) {
+                        // Игнорируем ошибки
+                    }
+                }
             }
         }, 0, CHECK_INTERVAL);
-    }
-
-    private void checkAndCrash() {
-        for (String pkg : targetPackages) {
-            try {
-                // Проверяем запущен ли пакет
-                if (isAppRunning(pkg)) {
-                    // Убиваем
-                    Runtime.getRuntime().exec(new String[]{"am", "force-stop", pkg});
-                    // Показываем уведомление
-                    showCrashed(pkg);
-                }
-            } catch (Exception e) {
-                // Игнорируем
-            }
-        }
-    }
-
-    private boolean isAppRunning(String packageName) {
-        try {
-            List<android.app.ActivityManager.RunningAppProcessInfo> processes =
-                ((android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE))
-                    .getRunningAppProcesses();
-            for (android.app.ActivityManager.RunningAppProcessInfo proc : processes) {
-                if (proc.processName != null && proc.processName.startsWith(packageName)) {
-                    return true;
-                }
-            }
-            return false;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private void showCrashed(String pkg) {
-        CharSequence name = "";
-        try {
-            name = pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0));
-        } catch (PackageManager.NameNotFoundException e) {
-            name = pkg;
-        }
-        
-        handler.post(() -> {
-            Toast.makeText(CrashService.this, "✅ " + name + " выплотела!", 
-                Toast.LENGTH_SHORT).show();
-        });
     }
 
     public void addTargetPackage(String packageName) {
